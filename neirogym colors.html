@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rainbow Colors Trainer</title>
+  <style>
+      body {
+          font-family: Arial, sans-serif;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          margin: 0;
+          padding: 20px;
+          min-height: 100vh;
+      }
+      
+      .controls {
+          position: fixed;
+          top: 20px;
+          left: 20px;
+          right: 20px;
+          background-color: rgba(255, 255, 255, 0.95);
+          padding: 15px;
+          border-radius: 10px;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+          display: flex;
+          align-items: center;
+          gap: 20px;
+          z-index: 1000;
+          flex-wrap: wrap;
+          backdrop-filter: blur(10px);
+      }
+      
+      .speed-control {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+      }
+      
+      .speed-slider {
+          width: 200px;
+          height: 6px;
+          border-radius: 3px;
+          background: #ddd;
+          outline: none;
+          -webkit-appearance: none;
+      }
+      
+      .speed-slider::-webkit-slider-thumb {
+          -webkit-appearance: none;
+          appearance: none;
+          width: 20px;
+          height: 20px;
+          border-radius: 50%;
+          background: #667eea;
+          cursor: pointer;
+      }
+      
+      .speed-slider::-moz-range-thumb {
+          width: 20px;
+          height: 20px;
+          border-radius: 50%;
+          background: #667eea;
+          cursor: pointer;
+          border: none;
+      }
+      
+      .play-pause-btn {
+          padding: 10px 20px;
+          background-color: #27ae60;
+          color: white;
+          border: none;
+          border-radius: 6px;
+          font-size: 14px;
+          cursor: pointer;
+          min-width: 80px;
+          transition: background-color 0.3s;
+      }
+      
+      .play-pause-btn:hover {
+          background-color: #229954;
+      }
+      
+      .play-pause-btn.paused {
+          background-color: #e74c3c;
+      }
+      
+      .play-pause-btn.paused:hover {
+          background-color: #c0392b;
+      }
+      
+      .refresh-btn {
+          padding: 10px 20px;
+          background-color: #9b59b6;
+          color: white;
+          border: none;
+          border-radius: 6px;
+          font-size: 14px;
+          cursor: pointer;
+          transition: background-color 0.3s;
+      }
+      
+      .refresh-btn:hover {
+          background-color: #8e44ad;
+      }
+      
+      .color-container {
+          position: absolute;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          background-color: rgba(255, 255, 255, 0.95);
+          border: 4px solid #667eea;
+          border-radius: 20px;
+          padding: 20px 30px;
+          box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+          opacity: 1;
+          transition: opacity 0.4s ease-in-out;
+          backdrop-filter: blur(10px);
+          text-align: center;
+          white-space: nowrap;
+      }
+      
+      .color-container.fade-out {
+          opacity: 0;
+      }
+      
+      .color-word {
+          font-size: 36px;
+          font-weight: bold;
+          margin: 0;
+          text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+          letter-spacing: 1px;
+      }
+      
+      .speed-display {
+          font-weight: bold;
+          color: #667eea;
+          min-width: 40px;
+      }
+      
+      .info-text {
+          font-size: 12px;
+          color: #666;
+          margin-top: 10px;
+      }
+  </style>
+</head>
+<body>
+  <div class="controls">
+      <div class="speed-control">
+          <label>Швидкість:</label>
+          <input type="range" id="speedSlider" class="speed-slider" min="0.5" max="7" value="2" step="0.1">
+          <span id="speedDisplay" class="speed-display">2.0с</span>
+      </div>
+      <button id="playPauseBtn" class="play-pause-btn">Пауза</button>
+      <button class="refresh-btn" onclick="generateNewColor()">Новий колір</button>
+      <div class="info-text">Колір тексту завжди відрізняється від написаного слова</div>
+  </div>
+  
+  <div id="colorContainer" class="color-container">
+      <div id="colorWord" class="color-word"></div>
+  </div>
+
+  <script>
+      // Кольори райдуги з українськими назвами
+      const rainbowColors = [
+          { name: 'ЧЕРВОНИЙ', color: '#FF0000' },
+          { name: 'ПОМАРАНЧЕВИЙ', color: '#FF8C00' },
+          { name: 'ЖОВТИЙ', color: '#FFD700' },
+          { name: 'ЗЕЛЕНИЙ', color: '#00FF00' },
+          { name: 'БЛАКИТНИЙ', color: '#00BFFF' },
+          { name: 'СИНІЙ', color: '#0000FF' },
+          { name: 'ФІОЛЕТОВИЙ', color: '#8A2BE2' }
+      ];
+      
+      let isPlaying = true;
+      let intervalId = null;
+      let currentSpeed = 2.0;
+      
+      // Масиви для справедливого розподілу
+      let wordColorPool = [...rainbowColors];
+      let textColorPool = [...rainbowColors];
+      let lastWordColor = null;
+      let lastTextColor = null;
+      
+      const speedSlider = document.getElementById('speedSlider');
+      const speedDisplay = document.getElementById('speedDisplay');
+      const playPauseBtn = document.getElementById('playPauseBtn');
+      const colorWord = document.getElementById('colorWord');
+      const container = document.getElementById('colorContainer');
+      
+      // Функція для справедливого вибору з пулу
+      function getRandomFromPool(pool, lastItem) {
+          // Якщо пул порожній, поповнюємо його
+          if (pool.length === 0) {
+              pool.push(...rainbowColors);
+              // Якщо останній елемент є в новому пулі, видаляємо його для уникнення повтору
+              if (lastItem) {
+                  const index = pool.findIndex(item => item.name === lastItem.name);
+                  if (index !== -1) {
+                      pool.splice(index, 1);
+                  }
+              }
+          }
+          
+          // Вибираємо випадковий елемент з пулу
+          const randomIndex = Math.floor(Math.random() * pool.length);
+          const selectedItem = pool[randomIndex];
+          
+          // Видаляємо вибраний елемент з пулу
+          pool.splice(randomIndex, 1);
+          
+          return selectedItem;
+      }
+      
+      function calculateContainerSize(text) {
+          // Створюємо тимчасовий елемент для вимірювання розміру тексту
+          const tempElement = document.createElement('div');
+          tempElement.style.position = 'absolute';
+          tempElement.style.visibility = 'hidden';
+          tempElement.style.fontSize = '36px';
+          tempElement.style.fontWeight = 'bold';
+          tempElement.style.letterSpacing = '1px';
+          tempElement.style.whiteSpace = 'nowrap';
+          tempElement.style.padding = '20px 30px';
+          tempElement.style.border = '4px solid transparent';
+          tempElement.textContent = text;
+          
+          document.body.appendChild(tempElement);
+          const width = tempElement.offsetWidth;
+          const height = tempElement.offsetHeight;
+          document.body.removeChild(tempElement);
+          
+          return { width, height };
+      }
+      
+      function getRandomPosition(containerSize) {
+          const controlsHeight = 120; // висота панелі управління
+          const margin = 20; // відступ від країв
+          
+          const maxX = Math.max(margin, window.innerWidth - containerSize.width - margin);
+          const maxY = Math.max(controlsHeight + margin, window.innerHeight - containerSize.height - margin);
+          
+          const x = margin + Math.random() * (maxX - margin);
+          const y = controlsHeight + margin + Math.random() * (maxY - controlsHeight - margin);
+          
+          return { x, y };
+      }
+      
+      function generateNewColor() {
+          // Спочатку зникаємо
+          container.classList.add('fade-out');
+          
+          setTimeout(() => {
+              // Вибираємо колір для тексту з пулу
+              const wordColor = getRandomFromPool(wordColorPool, lastWordColor);
+              lastWordColor = wordColor;
+              
+              // Вибираємо інший колір для відображення тексту
+              let textColor;
+              let attempts = 0;
+              do {
+                  textColor = getRandomFromPool(textColorPool, lastTextColor);
+                  attempts++;
+                  // Якщо після 10 спроб все ще той самий колір, форсуємо вибір іншого
+                  if (attempts > 10) {
+                      const availableColors = rainbowColors.filter(c => c.name !== wordColor.name);
+                      textColor = availableColors[Math.floor(Math.random() * availableColors.length)];
+                      break;
+                  }
+              } while (textColor.name === wordColor.name);
+              
+              lastTextColor = textColor;
+              
+              // Вимірюємо розмір контейнера для цього тексту
+              const containerSize = calculateContainerSize(wordColor.name);
+              const position = getRandomPosition(containerSize);
+              
+              // Встановлюємо текст та колір
+              colorWord.textContent = wordColor.name;
+              colorWord.style.color = textColor.color;
+              
+              // Встановлюємо нову позицію
+              container.style.left = position.x + 'px';
+              container.style.top = position.y + 'px';
+              
+              // Через невеликий час з'являємося в новому місці
+              setTimeout(() => {
+                  container.classList.remove('fade-out');
+              }, 50);
+              
+          }, 400); // час зникання
+      }
+      
+      function startAutoMove() {
+          if (intervalId) {
+              clearInterval(intervalId);
+          }
+          
+          intervalId = setInterval(() => {
+              if (isPlaying) {
+                  generateNewColor();
+              }
+          }, currentSpeed * 1000);
+      }
+      
+      function togglePlayPause() {
+          isPlaying = !isPlaying;
+          
+          if (isPlaying) {
+              playPauseBtn.textContent = 'Пауза';
+              playPauseBtn.classList.remove('paused');
+              startAutoMove();
+          } else {
+              playPauseBtn.textContent = 'Плей';
+              playPauseBtn.classList.add('paused');
+          }
+      }
+      
+      function updateSpeed() {
+          currentSpeed = parseFloat(speedSlider.value);
+          speedDisplay.textContent = currentSpeed.toFixed(1) + 'с';
+          
+          if (isPlaying) {
+              startAutoMove();
+          }
+      }
+      
+      // Обробники подій
+      speedSlider.addEventListener('input', updateSpeed);
+      playPauseBtn.addEventListener('click', togglePlayPause);
+      
+      // Генеруємо початковий колір та запускаємо автоматичну зміну при завантаженні сторінки
+      window.addEventListener('load', () => {
+          generateNewColor();
+          startAutoMove();
+      });
+      
+      // Оновлюємо позицію при зміні розміру вікна
+      window.addEventListener('resize', generateNewColor);
+  </script>
+</body>
+</html>
